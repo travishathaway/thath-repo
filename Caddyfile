@@ -1,0 +1,62 @@
+{
+	# Disable Caddy's automatic HTTPS / ACME — we're using mkcert certs.
+	auto_https off
+}
+
+repo.thath.local:8443 {
+	# TLS: use mkcert-generated certificates.
+	# Paths are relative to the directory where `caddy run` is invoked
+	# (the project root when using `pixi run serve-caddy`).
+	tls certs/repo.thath.local.pem certs/repo.thath.local-key.pem
+
+	# ------------------------------------------------------------------
+	# Unauthenticated routes — pass straight through to Flask
+	# ------------------------------------------------------------------
+
+	# OAuth2 Device Flow + token relay
+	handle /oauth/* {
+		reverse_proxy localhost:5000
+	}
+
+	# OpenID Connect discovery + JWKS (proxied from IdP via Flask)
+	handle /.well-known/* {
+		reverse_proxy localhost:5000
+	}
+
+	# ------------------------------------------------------------------
+	# Protected conda channel
+	# ------------------------------------------------------------------
+	handle /channel/* {
+		# Validate every request against Flask before serving any file.
+		# No caching — short-lived tokens must be validated on each request.
+		forward_auth localhost:5000 {
+			uri /auth-check
+
+			# Pass the client's Authorization header to Flask.
+			header_up Authorization {header.Authorization}
+
+			# On 401: copy WWW-Authenticate from Flask back to the client
+			# so conda-auth can parse the Device Flow challenge.
+			copy_headers WWW-Authenticate
+		}
+
+		# Serve channel static files.
+		# CHANNEL_DIR can be overridden via environment variable;
+		# defaults to ./channel relative to the project root.
+		file_server {
+			root {$CHANNEL_DIR:./channel}
+		}
+	}
+
+	# ------------------------------------------------------------------
+	# Catch-all: anything else returns 404
+	# ------------------------------------------------------------------
+	handle {
+		respond 404
+	}
+
+	# Log to stdout in default format
+	log {
+		output stdout
+	}
+}

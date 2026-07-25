@@ -1,0 +1,22 @@
+package:
+  name: greet
+  version: "0.1.0"
+
+source:
+  path: .
+
+build:
+  noarch: python
+  script: python -m pip install . --no-deps --no-build-isolation -vv
+
+requirements:
+  host:
+    - python >=3.11
+    - pip
+    - hatchling
+  run:
+    - python >=3.11
+
+about:
+  summary: Trivial noarch Python package for local channel testing
+  license: MIT
